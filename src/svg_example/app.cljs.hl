@@ -36,8 +36,14 @@
         (clj->js 
           {:drag (fn [ev ui]
                    (reset! record true)
-                   (let [x    (.-left (.-position ui))
-                         y    (.-top (.-position ui))]
+                   (let [xmax (:width @chart)
+                         ymax (:height @chart)
+                         x    (.-left (.-position ui))
+                         x    (if (> 0 x) 0 x)
+                         x    (if (< xmax x) xmax x)
+                         y    (.-top (.-position ui))
+                         y    (if (> 0 y) 0 y)
+                         y    (if (< ymax y) ymax y)]
                       (.setAttribute (.-target ev) "cx" x)
                       (.setAttribute (.-target ev) "cy" y)
                       (swap! circle assoc :x x :y y)))})))))
@@ -99,7 +105,7 @@
 (defelem history-element [{:keys [id history title] :as attr} _]
   (div :class "wrapper"
     (div :class "form-group"
-      (label :for title (cell= (str "History [" (count history) "]")))
+      (label :for title (cell= (str "History [" current "]")))
       (input :type "range"
              :class "form-control"
              :name title
