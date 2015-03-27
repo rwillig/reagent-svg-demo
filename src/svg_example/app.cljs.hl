@@ -1,0 +1,119 @@
+(ns svg-example.app
+  (:require-macros
+    [tailrecursion.hoplon       :refer [with-init! with-interval]])
+    [tailrecursion.javelin      :refer  [defc defc= cell=]]
+  (:require
+    [cljsjs.jquery-ui]
+    [tailrecursion.hoplon.svg   :as svg]))
+
+(defc record true)
+(defc chart {:width 720 :height 400})
+(defc circl {:x 360 :y 200 :radius 50 :fill "black" :clicks 0})
+(defc history (conj [] @circl)) 
+(defc current (count @history))
+(defc colors ["gray" "red" "orange" "yellow" "green" "blue" "aqua" "indigo" "purple" "brown" "black"])
+
+(add-watch circl :change #(when @record 
+                            (swap! history conj %4)
+                            (reset! current (count @history))))
+
+;(cell= (.log js/console "[history] "  (clj->js history)))
+;(cell= (.log js/console "[current] "  (clj->js current)))
+;(cell= (.log js/console "[circle] "  (clj->js circl)))
+
+(defelem circle [{:keys [id circle css click] :as attr} _]
+  (with-let [c (svg/circle
+                  :id   id
+                  :cx   (cell= (:x circle))
+                  :cy   (cell= (:y circle))
+                  :r    (cell= (:radius circle))
+                  :fill (cell= (:fill circle))
+                  :css  (cell= css)
+                  :click click)]
+    (with-init!
+      (.draggable 
+        (js/jQuery c)
+        (clj->js 
+          {:drag (fn [ev ui]
+                   (reset! record true)
+                   (let [x    (.-left (.-position ui))
+                         y    (.-top (.-position ui))]
+                      (.setAttribute (.-target ev) "cx" x)
+                      (.setAttribute (.-target ev) "cy" y)
+                      (swap! circle assoc :x x :y y)))})))))
+
+(defelem container [{:keys [chart] :as attr} kids]
+  (cell-let [{:keys [width height]} chart]
+    (svg/svg (assoc (dissoc attr :chart) :width width :height height) kids)))
+
+(defelem range-element [{:keys [id target part title min max change] :as attr} kids]
+  (div :class "form-group"
+    (label :for title title 
+      (small :text (cell= (str " [" ((keyword part) target) "]")))
+      (input
+        :id id 
+        :type "range" 
+        :class "form-control" 
+        :name title 
+        :min min 
+        :max max
+        :value (cell= (part target))
+        :input (fn [] (do 
+                         (reset! record true) 
+                         (swap! target assoc part (val-id id))))
+        :change (fn [] (do 
+                         (reset! record true) 
+                         (swap! target assoc part (val-id id))))))))
+
+(defelem select-element [{:keys [id target part title options] :as attr} _]
+  (div :class "form-group"
+    (label :for title title)
+    (select 
+      :id   id
+      :name title
+      :class "form-control"
+      :value (cell= (part target))
+      :change (fn [] (do 
+                       (reset! record true) 
+                       (swap! target assoc part (val-id id))))
+      (loop-tpl :bindings [opt (cell= options)]
+        (option :value opt opt)))))
+
+(defn play-history [dir]
+  (reset! record false)
+  (let [lim        (dec (count @history))
+        strt       (if (= dir :forward) 0 lim)
+        d          (reset! circl (nth @history strt))
+        tgt        (if (= dir :forward) lim  0)
+        verb       (if (= dir :forward) inc dec)
+        ndx        (cell strt)
+        fun        #(do
+                      (swap! ndx verb)
+                      (reset! current @ndx)
+                      (reset! circl (nth @history @ndx)))
+        intrvl     (js/setInterval fun 20) 
+        wtch       (cell= (when (= ndx tgt) (js/clearInterval intrvl)))]))
+
+
+
+(defelem history-element [{:keys [id history title] :as attr} _]
+  (div :class "wrapper"
+    (div :class "form-group"
+      (label :for title (cell= (str "History [" (count history) "]")))
+      (input :type "range"
+             :class "form-control"
+             :name title
+             :id id
+             :min 0
+             :max (cell= (dec (count history)))
+             :value current
+             :input  #(do 
+                        (reset! record false)
+                        (reset! current (val-id id))
+                        (reset! circl (get @history (js/parseInt @current))))))
+    (button :class "btn btn-default"
+            :click #(play-history :reverse)
+      (span :class "glyphicon glyphicon-fast-backward"))
+    (button :class "btn btn-default pull-right"
+            :click #(play-history :forward)
+      (span :class "glyphicon glyphicon-fast-forward"))))
